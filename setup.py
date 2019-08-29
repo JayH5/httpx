@@ -58,6 +58,7 @@ setup(
         "idna==2.*",
         "rfc3986==1.*",
     ],
+    extras_require={"trio": ["trio"]},
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Environment :: Web Environment",
