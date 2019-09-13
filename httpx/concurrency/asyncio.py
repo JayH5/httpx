@@ -23,7 +23,6 @@ from .base import (
     BaseQueue,
     BaseStream,
     ConcurrencyBackend,
-    TimeoutFlag,
 )
 
 SSL_MONKEY_PATCH_APPLIED = False
@@ -57,9 +56,9 @@ class Stream(BaseStream):
         stream_writer: asyncio.StreamWriter,
         timeout: TimeoutConfig,
     ):
+        super().__init__(timeout)
         self.stream_reader = stream_reader
         self.stream_writer = stream_writer
-        self.timeout = timeout
 
     def get_http_version(self) -> str:
         ssl_object = self.stream_writer.get_extra_info("ssl_object")
@@ -74,52 +73,20 @@ class Stream(BaseStream):
 
         return "HTTP/2" if ident == "h2" else "HTTP/1.1"
 
-    async def read(
-        self, n: int, timeout: TimeoutConfig = None, flag: TimeoutFlag = None
-    ) -> bytes:
-        if timeout is None:
-            timeout = self.timeout
+    async def read_or_timeout(self, n: int, timeout: typing.Optional[float]) -> bytes:
+        try:
+            return await asyncio.wait_for(self.stream_reader.read(n), timeout)
+        except asyncio.TimeoutError:
+            raise ReadTimeout() from None
 
-        while True:
-            # Check our flag at the first possible moment, and use a fine
-            # grained retry loop if we're not yet in read-timeout mode.
-            should_raise = flag is None or flag.raise_on_read_timeout
-            read_timeout = timeout.read_timeout if should_raise else 0.01
-            try:
-                data = await asyncio.wait_for(self.stream_reader.read(n), read_timeout)
-                break
-            except asyncio.TimeoutError:
-                if should_raise:
-                    raise ReadTimeout() from None
-
-        return data
-
-    def write_no_block(self, data: bytes) -> None:
-        self.stream_writer.write(data)  # pragma: nocover
-
-    async def write(
-        self, data: bytes, timeout: TimeoutConfig = None, flag: TimeoutFlag = None
+    async def write_or_timeout(
+        self, data: bytes, timeout: typing.Optional[float]
     ) -> None:
-        if not data:
-            return
-
-        if timeout is None:
-            timeout = self.timeout
-
         self.stream_writer.write(data)
-        while True:
-            try:
-                await asyncio.wait_for(  # type: ignore
-                    self.stream_writer.drain(), timeout.write_timeout
-                )
-                break
-            except asyncio.TimeoutError:
-                # We check our flag at the first possible moment, in order to
-                # allow us to suppress write timeouts, if we've since
-                # switched over to read-timeout mode.
-                should_raise = flag is None or flag.raise_on_write_timeout
-                if should_raise:
-                    raise WriteTimeout() from None
+        try:
+            await asyncio.wait_for(self.stream_writer.drain(), timeout)
+        except asyncio.TimeoutError:
+            raise WriteTimeout() from None
 
     def is_connection_dropped(self) -> bool:
         return self.stream_reader.at_eof()
