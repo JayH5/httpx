@@ -567,6 +567,7 @@ class AsyncClient(BaseClient):
         await self.dispatch.close()
 
     async def __aenter__(self) -> "AsyncClient":
+        await self.dispatch.__aenter__()
         return self
 
     async def __aexit__(
@@ -954,6 +955,8 @@ class Client(BaseClient):
         self.concurrency_backend.run(coroutine)
 
     def __enter__(self) -> "Client":
+        coroutine = self.dispatch.__aenter__
+        self.concurrency_backend.run(coroutine)
         return self
 
     def __exit__(
