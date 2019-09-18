@@ -4,7 +4,7 @@ import typing
 import h2.connection
 import h2.events
 
-from ..concurrency.base import BaseEvent, BaseStream, ConcurrencyBackend, TimeoutFlag
+from ..concurrency.base import BaseEvent, BaseTCPStream, ConcurrencyBackend, TimeoutFlag
 from ..config import TimeoutConfig, TimeoutTypes
 from ..exceptions import ProtocolError
 from ..models import AsyncRequest, AsyncResponse
@@ -18,7 +18,7 @@ class HTTP2Connection:
 
     def __init__(
         self,
-        stream: BaseStream,
+        stream: BaseTCPStream,
         backend: ConcurrencyBackend,
         on_release: typing.Callable = None,
     ):
@@ -36,7 +36,7 @@ class HTTP2Connection:
     ) -> AsyncResponse:
         timeout = None if timeout is None else TimeoutConfig(timeout)
 
-        #  Start sending the request.
+        # Start sending the request.
         if not self.initialized:
             self.initiate_connection()
 
